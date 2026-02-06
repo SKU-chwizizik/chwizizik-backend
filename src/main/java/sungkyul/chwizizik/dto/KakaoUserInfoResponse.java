@@ -1,6 +1,6 @@
 package sungkyul.chwizizik.dto;
 
-import com.fasterxml.jackson.annotation.JsonProperty; // 👈 Jackson으로 교체
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 @Data
