@@ -6,23 +6,30 @@ import lombok.Data;
 @Data
 public class KakaoUserInfoResponse {
 
-    public Long id;
-    
-    @JsonProperty("connected_at")
-    public String connectedAt;
+    private Long id;
 
-    public KakaoAccount kakao_account;
+    @JsonProperty("connected_at")
+    private String connectedAt;
+
+    @JsonProperty("kakao_account")
+    private KakaoAccount kakaoAccount;
 
     @Data
     public static class KakaoAccount {
-        public Boolean profile_nickname_needs_agreement;
-        public Profile profile;
+        @JsonProperty("profile_nickname_needs_agreement")
+        private Boolean profileNicknameNeedsAgreement;
+
+        private Profile profile;
     }
 
     @Data
     public static class Profile {
-        public String nickname;
-        public String thumbnail_image_url;
-        public String profile_image_url;
+        private String nickname;
+
+        @JsonProperty("thumbnail_image_url")
+        private String thumbnailImageUrl;
+
+        @JsonProperty("profile_image_url")
+        private String profileImageUrl;
     }
 }
