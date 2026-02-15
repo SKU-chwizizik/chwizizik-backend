@@ -32,4 +32,8 @@ public class KakaoUserInfoResponse {
         @JsonProperty("profile_image_url")
         private String profileImageUrl;
     }
+
+    public Object getProperties() {
+        throw new UnsupportedOperationException("Unimplemented method 'getProperties'");
+    }
 }

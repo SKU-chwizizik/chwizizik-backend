@@ -88,14 +88,11 @@ public class KakaoService {
         Long kakaoId = kakaoUser.getId();
 
         String nickname = null;
-        String profileImageUrl = null;
 
         if (kakaoUser.getKakaoAccount() != null &&
             kakaoUser.getKakaoAccount().getProfile() != null) {
 
             nickname = kakaoUser.getKakaoAccount().getProfile().getNickname();
-            profileImageUrl =
-                    kakaoUser.getKakaoAccount().getProfile().getProfileImageUrl();
         }
 
         String userId = "kakao_" + kakaoId;
@@ -108,7 +105,6 @@ public class KakaoService {
                 );
 
         user.setName(nickname);
-        user.setProfileImage(profileImageUrl);
 
         userRepository.save(user);
     }
