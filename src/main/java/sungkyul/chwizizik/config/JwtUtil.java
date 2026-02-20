@@ -13,7 +13,6 @@ import java.util.Date;
 @Component
 public class JwtUtil {
 
-    // 실제 서비스에서는 이 키를 아주 길고 복잡하게 만들어서 .env에 숨겨야 합니다!
     private final String secretKey = "your_very_secret_key_should_be_long_enough_to_be_safe_12345678";
     private final long expirationTime = 1000 * 60 * 60 * 24; // 유효기간 24시간
 
@@ -33,5 +32,19 @@ public class JwtUtil {
                 .setExpiration(new Date(System.currentTimeMillis() + expirationTime))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
+    }
+
+    private Claims extractAllClaims(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
+
+    // 토큰에서 닉네임만 꺼내기
+    public String getNicknameFromToken(String token) {
+        Claims claims = extractAllClaims(token);
+        return (String) claims.get("nickname");
     }
 }

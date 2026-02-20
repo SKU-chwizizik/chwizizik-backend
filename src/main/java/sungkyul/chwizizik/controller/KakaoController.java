@@ -58,8 +58,11 @@ public class KakaoController {
             for (Cookie cookie : cookies) {
                 // 우리가 구워준 'accessToken' 쿠키가 있는지 확인
                 if ("accessToken".equals(cookie.getName())) {
+                    String token = cookie.getValue();
+                    String realNickname = jwtUtil.getNicknameFromToken(token);
+                    
                     Map<String, String> result = new HashMap<>();
-                    result.put("nickname", "동화"); // 실제로는 토큰/DB에서 꺼낸 값
+                    result.put("nickname", realNickname); // 실제로는 토큰/DB에서 꺼낸 값
                     return ResponseEntity.ok(result);
                 }
             }
