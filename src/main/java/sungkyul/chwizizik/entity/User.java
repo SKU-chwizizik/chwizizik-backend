@@ -11,6 +11,7 @@ import java.util.List;
 // mysql에서는 생성일과 수정일이 자동으로 나오지만 JPA에서는 직접하기에 이걸 자동으로 하기 위한 어노테이션 추가임.
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 
 @Entity
@@ -20,6 +21,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@EntityListeners(AuditingEntityListener.class)
 public class User {
 
     @Id
@@ -55,14 +57,17 @@ public class User {
 
     @Column(name = "kakao_profile", length = 500)
     private String kakaoProfile;
-
-    @Column(name = "created_at", nullable = false)
+    
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
-
+    
+    @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
     // FK 키 설정 연관관계까지 설정한거임
+    @Builder.Default
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
     private List<Interview> interviews = new ArrayList<>();
 }
