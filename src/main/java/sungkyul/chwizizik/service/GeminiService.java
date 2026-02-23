@@ -84,7 +84,7 @@ public class GeminiService {
             List<Map<String, Object>> parts = (List<Map<String, Object>>) resContent.get("parts");
             return (String) parts.get(0).get("text");
         } catch (HttpClientErrorException e) {
-            // 에러 발생 시에 터미널에 문제 출력(일단은 임시 테스트용)
+            // 에러 발생 시 터미널에 문제 출력
             System.err.println("\n[ERROR] API 호출 실패: " + e.getStatusCode());
             System.err.println("에러 내용: " + e.getResponseBodyAsString());
             return "(면접관이 잠시 자리를 비웠습니다. 다시 시도해 주세요.)";
