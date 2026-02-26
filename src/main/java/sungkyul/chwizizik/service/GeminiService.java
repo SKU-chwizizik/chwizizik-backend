@@ -1,17 +1,11 @@
 package sungkyul.chwizizik.service;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import java.util.*;
 
 @Service
-@RequiredArgsConstructor
 public class GeminiService {
 
     @Value("${gemini.api.key}")
@@ -20,76 +14,60 @@ public class GeminiService {
     @Value("${gemini.api.url}")
     private String apiUrl;
 
-    // 면접 대화 내용 저장소
-    private List<String> conversationHistory = new ArrayList<>();
+    private final RestTemplate restTemplate = new RestTemplate();
+    private int turnCount = 0; // 면접 질문 횟수 추적
+    private final int MAX_TURNS = 5; // 실제 면접 수준인 5~6회로 설정
 
-    // 페르소나 설정
+    // 시스템 프롬프트
+    private final String SYSTEM_PROMPT = 
+        "당신은 깐깐하고 보수적인 면접관 '박 부장'입니다. 다음 지침을 엄격히 따르세요:\n" +
+        "1. 지원자의 역량을 파악하기 위해 날카로운 꼬리 질문을 던지세요.\n" +
+        "2. 질문은 한 번에 하나씩만 하세요.\n" +
+        "3. 대화 횟수가 부족하면 절대 면접을 끝내지 마세요.\n" +
+        "4. 마지막 질문이 끝난 후에는 '수고하셨습니다. 면접을 마칩니다.'라고 말하고 마지막에 반드시 [면접 종료]를 붙이세요.";
+
     public String getInitialQuestion() {
-        conversationHistory.clear();
-        String prompt = "당신은 23년 차 베테랑 임원 면접관 '박 부장'입니다.\n" +
-                        "지침:\n" +
-                        "1. 정중하고 무게감 있게 말하세요.\n" +
-                        "2. 음성 출력을 고려해 2문장 이내로 간결하게 첫 질문을 던지세요.\n" +
-                        "3. (서류를 보며)와 같은 행동 묘사를 섞어주세요.";
-        
-        String response = callGeminiApi(prompt);
-        if (response != null) {
-            conversationHistory.add("면접관: " + response);
-        }
-        return response;
+        turnCount = 0; 
+        return "반갑습니다, 지원자님. 우리 회사의 핵심 가치와 본인의 기술적 강점이 어떻게 맞닿아 있는지 구체적인 사례를 들어 말씀해 주시겠습니까?";
     }
 
-    // 대화 규칙과 조건
     public String getNextQuestion(String userResponse) {
-        conversationHistory.add("지원자: " + userResponse);
+        turnCount++;
 
-        StringBuilder promptBuilder = new StringBuilder();
-        promptBuilder.append("당신은 면접관 '박 부장'입니다. 아래 대화 흐름을 바탕으로 날카로운 질문을 던지세요.\n\n");
-        for (String history : conversationHistory) {
-            promptBuilder.append(history).append("\n");
-        }
-        promptBuilder.append("\n[지침]\n")
-                     .append("- 답변은 2~3문장 이내로 간결하게 할 것.\n")
-                     .append("- 지원자의 이전 답변을 논리적으로 파고드는 꼬리 질문을 할 것.\n")
-                     .append("- 면접 종료 시 정중한 인사 뒤에 [면접 종료] 태그를 붙일 것.");
-
-        String response = callGeminiApi(promptBuilder.toString());
-        if (response != null) {
-            conversationHistory.add("면접관: " + response);
-        }
-        return response;
-    }
-
-    private String callGeminiApi(String prompt) {
-        RestTemplate restTemplate = new RestTemplate();
-        // 💡 trim() 사용으로 apikey에 대한 공백 에러 방지 코드
-        String urlWithKey = apiUrl.trim() + "?key=" + apiKey.trim();
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        Map<String, Object> requestBody = new HashMap<>();
-        Map<String, Object> content = new HashMap<>();
-        Map<String, Object> part = new HashMap<>();
-        part.put("text", prompt);
-        content.put("parts", Collections.singletonList(part));
-        requestBody.put("contents", Collections.singletonList(content));
-
-        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+        Map<String, Object> requestBody = Map.of(
+            "contents", List.of(
+                Map.of("parts", List.of(Map.of("text", SYSTEM_PROMPT + "\n현재 질문 순서: " + turnCount + "/" + MAX_TURNS + "\n지원자 답변: " + userResponse)))
+            )
+        );
 
         try {
-            Map<String, Object> response = restTemplate.postForObject(urlWithKey, entity, Map.class);
-            List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.get("candidates");
-            Map<String, Object> resContent = (Map<String, Object>) candidates.get(0).get("content");
-            List<Map<String, Object>> parts = (List<Map<String, Object>>) resContent.get("parts");
-            return (String) parts.get(0).get("text");
-        } catch (HttpClientErrorException e) {
-            // 에러 발생 시 터미널에 문제 출력
-            System.err.println("\n[ERROR] API 호출 실패: " + e.getStatusCode());
-            System.err.println("에러 내용: " + e.getResponseBodyAsString());
-            return "(면접관이 잠시 자리를 비웠습니다. 다시 시도해 주세요.)";
+            String url = apiUrl + "?key=" + apiKey;
+            Map<?, ?> response = restTemplate.postForObject(url, requestBody, Map.class);
+            
+            if (response != null && response.containsKey("candidates")) {
+                List<?> candidates = (List<?>) response.get("candidates");
+                Map<?, ?> firstCandidate = (Map<?, ?>) candidates.get(0);
+                Map<?, ?> content = (Map<?, ?>) firstCandidate.get("content");
+                List<?> parts = (List<?>) content.get("parts");
+                Map<?, ?> firstPart = (Map<?, ?>) parts.get(0);
+                
+                String aiText = (String) firstPart.get("text");
+
+                // 강제 종료 방지 로직
+                if (turnCount < MAX_TURNS) {
+                    aiText = aiText.replace("[면접 종료]", "").trim();
+                    if (!aiText.endsWith("?")) {
+                        aiText += "\n추가로, 이 부분에 대해 더 자세히 설명해 주시겠습니까?";
+                    }
+                } else if (!aiText.contains("[면접 종료]")) {
+                    aiText += "\n\n오늘 면접은 여기까지 하겠습니다. 수고하셨습니다. [면접 종료]";
+                }
+
+                return aiText;
+            }
+            return "박 부장님이 서류를 검토 중입니다. 다시 답변해 주세요.";
         } catch (Exception e) {
-            return "(연결 오류 발생) " + e.getMessage();
+            return "연결 오류가 발생했습니다: " + e.getMessage();
         }
     }
 }

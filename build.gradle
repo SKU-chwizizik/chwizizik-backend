@@ -62,6 +62,6 @@ tasks.named('test') {
 	useJUnitPlatform()
 }
 
-// bootRun {
-//     standardInput = System.in
-// }
+bootRun {
+	standardInput = System.in
+}

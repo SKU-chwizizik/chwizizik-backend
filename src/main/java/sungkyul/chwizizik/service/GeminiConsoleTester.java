@@ -1,48 +1,53 @@
 package sungkyul.chwizizik.service;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 import java.util.Scanner;
 
 @Component
-@RequiredArgsConstructor
 public class GeminiConsoleTester implements CommandLineRunner {
 
     private final GeminiService geminiService;
 
+    public GeminiConsoleTester(GeminiService geminiService) {
+        this.geminiService = geminiService;
+    }
+
     @Override
     public void run(String... args) throws Exception {
-        // Gradle 환경에서 System.in을 강제로 기다리게 하기 위해 인스턴스를 루프 밖에서 한 번만 생성
-        Scanner scanner = new Scanner(System.in);
-        
-        System.out.println("\n========================================");
-        System.out.println("   [시스템] 박 부장님과의 모의 면접 시작");
-        System.out.println("========================================\n");
+        try (Scanner scanner = new Scanner(System.in)) {
+            System.out.println("\n[시스템] 박 부장님과의 모의 면접 시작");
+            System.out.println("================================");
 
-        String aiResponse = geminiService.getInitialQuestion();
-        System.out.println("[박 부장]: " + aiResponse);
+            // 첫 질문 가져오기
+            String initialQuestion = geminiService.getInitialQuestion();
+            System.out.println("\n[박 부장]: " + initialQuestion);
 
-        while (true) {
-            System.out.print("\n[지원자(나)]: ");
+            while (true) {
+                // 터미널 안정화를 위한 대기
+                Thread.sleep(300);
 
-            // 무한 루프 방지
-            // 실제 입력이 들어올 때까지 쓰레드를 일시 정지
-            if (scanner.hasNext()) { 
-                String userIn = scanner.nextLine();
+                System.out.print("\n[지원자(나)]: ");
+                System.out.flush();
 
-                if (userIn.trim().isEmpty()) continue; // 빈 입력은 무시
-                if (userIn.equalsIgnoreCase("exit")) break;
+                if (scanner.hasNextLine()) {
+                    String userResponse = scanner.nextLine();
 
-                String nextQuestion = geminiService.getNextQuestion(userIn);
-                System.out.println("\n[박 부장]: " + nextQuestion);
+                    // 유저가 직접 종료를 원할 때
+                    if (userResponse.equalsIgnoreCase("종료")) {
+                        System.out.println("\n[시스템] 면접을 중단합니다.");
+                        break;
+                    }
 
-                if (nextQuestion.contains("[면접 종료]")) {
-                    System.out.println("\n[시스템]: 면접이 종료되었습니다.");
-                    break;
+                    // 박 부장의 다음 질문 생성
+                    String nextQuestion = geminiService.getNextQuestion(userResponse);
+                    System.out.println("\n[박 부장]: " + nextQuestion);
+
+                    // 면접 종료 태그
+                    if (nextQuestion.contains("[면접 종료]")) {
+                        break;
+                    }
                 }
-            } else {
-                Thread.sleep(1000);
             }
         }
     }
