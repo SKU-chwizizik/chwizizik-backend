@@ -3,7 +3,7 @@ package sungkyul.chwizizik.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.time.LocalDate;
+// import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,20 +25,17 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 public class User {
 
     @Id
-    @Column(name = "user_id", length = 50, nullable = false)
+    @Column(name = "userId", length = 50, nullable = false)
     private String userId;
 
-    @Column(name = "password_hash", length = 255)
-    private String passwordHash;
+    @Column(name = "password", length = 255)
+    private String password;
 
     @Column(name = "name", length = 50)
     private String name;
 
-    @Column(name = "birth_date")
-    private LocalDate birthDate;
-
-    @Column(name = "phone", length = 20)
-    private String phone;
+    @Column(name = "phoneNumber", length = 20)
+    private String phoneNumber;
 
     @Column(name = "email", length = 120)
     private String email;
@@ -46,17 +43,14 @@ public class User {
     @Column(name = "desired_job", length = 100)
     private String desiredJob;
 
-    @Column(name = "resume_file", length = 255)
-    private String resumeFile;
+    // @Column(name = "resume_file", length = 255)
+    // private String resumeFile;
 
     @Column(name = "kakao_id")
     private Long kakaoId;
 
     @Column(name = "kakao_nickname", length = 100)
     private String kakaoNickname;
-
-    @Column(name = "kakao_profile", length = 500)
-    private String kakaoProfile;
     
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
