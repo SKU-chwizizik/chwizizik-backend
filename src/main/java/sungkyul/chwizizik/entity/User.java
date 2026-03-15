@@ -34,17 +34,14 @@ public class User {
     @Column(name = "name", length = 50)
     private String name;
 
-    @Column(name = "phoneNumber", length = 20)
-    private String phoneNumber;
+    @Column(name = "phone", length = 20)
+    private String phone;
 
     @Column(name = "email", length = 120)
     private String email;
 
     @Column(name = "desired_job", length = 100)
     private String desiredJob;
-
-    // @Column(name = "resume_file", length = 255)
-    // private String resumeFile;
 
     @Column(name = "kakao_id")
     private Long kakaoId;

@@ -51,7 +51,7 @@ public class KakaoController {
         response.sendRedirect("http://localhost:5173/welcome");
     }
 
-    @GetMapping("/api/user/me")
+    @GetMapping("/api/kakao/me")
     public ResponseEntity<?> checkLoginStatus(HttpServletRequest request) {
         Cookie[] cookies = request.getCookies();
         if (cookies != null) {
@@ -70,19 +70,19 @@ public class KakaoController {
         return ResponseEntity.status(401).body("로그인이 필요합니다");
     }
 
-    @PostMapping("/api/user/logout")
-    public ResponseEntity<?> logout(HttpServletResponse response) {
-        // 1. 기존에 발급한 accessToken 쿠키와 이름이 같은 쿠키 생성
-        Cookie cookie = new Cookie("accessToken", null);
+    // @PostMapping("/api/user/logout")
+    // public ResponseEntity<?> logout(HttpServletResponse response) {
+    //     // 1. 기존에 발급한 accessToken 쿠키와 이름이 같은 쿠키 생성
+    //     Cookie cookie = new Cookie("accessToken", null);
         
-        // 2. 쿠키의 수명을 0으로 설정하여 즉시 삭제되도록 함
-        cookie.setMaxAge(0);
-        cookie.setPath("/");
-        cookie.setHttpOnly(true); // 생성할 때와 동일한 설정 권장
+    //     // 2. 쿠키의 수명을 0으로 설정하여 즉시 삭제되도록 함
+    //     cookie.setMaxAge(0);
+    //     cookie.setPath("/");
+    //     cookie.setHttpOnly(true); // 생성할 때와 동일한 설정 권장
 
-        // 3. 응답에 섞어서 보냄
-        response.addCookie(cookie);
+    //     // 3. 응답에 섞어서 보냄
+    //     response.addCookie(cookie);
 
-        return ResponseEntity.ok().body("로그아웃 성공");
-    }
+    //     return ResponseEntity.ok().body("로그아웃 성공");
+    // }
 }
