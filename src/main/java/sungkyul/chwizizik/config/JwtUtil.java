@@ -4,6 +4,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import jakarta.servlet.http.Cookie;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -50,5 +51,28 @@ public class JwtUtil {
     public String getNicknameFromToken(String token) {
         Claims claims = extractAllClaims(token);
         return (String) claims.get("nickname");
+    }
+
+    // 토큰에서 userId 꺼내기
+    public String getUserIdFromToken(String token) {
+        return extractAllClaims(token).getSubject();
+    }
+
+    // JWT 쿠키 생성
+    public Cookie createTokenCookie(String userId, String nickname) {
+        Cookie cookie = new Cookie("accessToken", createToken(userId, nickname));
+        cookie.setHttpOnly(true);
+        cookie.setPath("/");
+        cookie.setMaxAge(60 * 60 * 24);
+        return cookie;
+    }
+
+    // 로그아웃용 만료 쿠키
+    public Cookie createExpiredCookie() {
+        Cookie cookie = new Cookie("accessToken", null);
+        cookie.setHttpOnly(true);
+        cookie.setPath("/");
+        cookie.setMaxAge(0);
+        return cookie;
     }
 }
