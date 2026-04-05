@@ -32,7 +32,7 @@ import java.util.Map;
 public class PortfolioService {
 
     private static final Logger log = LoggerFactory.getLogger(PortfolioService.class);
-    private static final String AI_SERVICE_URL = "http://localhost:8000/parse-resume";
+    private static final String AI_SERVICE_URL = "http://localhost:8000/embed-resume";
 
     private final UserRepository userRepository;
     private final ResumeRepository resumeRepository;
@@ -44,7 +44,7 @@ public class PortfolioService {
         User user = userRepository.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
 
-        String resumeMarkdown = parseResumeSafely(pdfFile);
+        String resumeMarkdown = parseResumeSafely(pdfFile, userId);
 
         Resume resume = resumeRepository.save(Resume.builder()
                 .fileName(pdfFile.getOriginalFilename())
@@ -63,8 +63,8 @@ public class PortfolioService {
         User user = userRepository.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
 
-        // 1. AI 서비스에 PDF 전송 → Markdown 수신 (AI 서비스 미실행 시 빈 문자열로 대체)
-        String resumeMarkdown = parseResumeSafely(pdfFile);
+        // 1. AI 서비스에 PDF 전송 → Markdown 수신 + ChromaDB 임베딩 (AI 서비스 미실행 시 빈 문자열로 대체)
+        String resumeMarkdown = parseResumeSafely(pdfFile, userId);
 
         // 2. User 업데이트 (취업 희망 분야, 학력 정보)
         user.setDesiredJob(desiredJob);
@@ -89,16 +89,16 @@ public class PortfolioService {
                 ));
     }
 
-    private String parseResumeSafely(MultipartFile pdfFile) {
+    private String parseResumeSafely(MultipartFile pdfFile, String userId) {
         try {
-            return parseResume(pdfFile);
+            return parseResume(pdfFile, userId);
         } catch (Exception e) {
             log.warn("AI 서비스 호출 실패 — PDF 파싱 생략: {}", e.getMessage());
             return "";
         }
     }
 
-    private String parseResume(MultipartFile pdfFile) throws IOException {
+    private String parseResume(MultipartFile pdfFile, String userId) throws IOException {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
 
@@ -110,6 +110,7 @@ public class PortfolioService {
             }
         };
         body.add("file", fileResource);
+        body.add("user_id", userId);
 
         HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
         ResponseEntity<Map<String, Object>> response = restTemplate.exchange(

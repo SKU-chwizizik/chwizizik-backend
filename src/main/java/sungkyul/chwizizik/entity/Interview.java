@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 
+
 @Entity
 @Table(name = "interviews")
 @Getter
@@ -26,10 +27,6 @@ public class Interview {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "ai_interviewer_id", nullable = false)
-    private AiInterviewer aiInterviewer;  
-
     @Column(name = "interview_at", nullable = false)
     private LocalDateTime interviewAt;
 
@@ -39,10 +36,12 @@ public class Interview {
     @Column(name = "language", length = 20, nullable = false)
     private String language;
 
+    // "POOL_GENERATING" | "POOL_READY" | "IN_PROGRESS" | "COMPLETED"
     @Column(name = "status", length = 30, nullable = false)
     private String status;
 
     // 연관관계 설정 - 인터뷰는 여러 질문을 가질 수 있으므로 1:N 관계로 설정한거임
+    @Builder.Default
     @OneToMany(mappedBy = "interview",
                fetch = FetchType.LAZY,
                cascade = CascadeType.ALL,
