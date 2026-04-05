@@ -40,4 +40,22 @@ public class Question {
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+
+    // 본 질문 순서 1~5, 꼬리질문은 null
+    @Column(name = "question_order")
+    private Integer questionOrder;
+
+    // 꼬리질문인 경우 부모 질문 지정, null이면 본 질문
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_question_id")
+    private Question parentQuestion;
+
+    // 꼬리질문 순번 (한 질문에 최대 1개), null이면 본 질문
+    @Column(name = "followup_index")
+    private Integer followupIndex;
+
+    // 어떤 풀 아이템에서 출제됐는지 추적 (꼬리질문은 null)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "pool_item_id")
+    private QuestionPoolItem poolItem;
 }
