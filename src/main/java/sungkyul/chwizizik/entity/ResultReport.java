@@ -23,17 +23,23 @@ public class ResultReport {
     private Interview interview;
 
     @Lob
-    @Column(name = "summary")
+    @Column(name = "summary", columnDefinition = "TEXT")
     private String summary;
 
-    @Column(name = "softskill_score")
-    private Integer softskillScore;
+    // 카테고리별 점수 JSON: {"커뮤니케이션": 78, "논리적사고": 65, ...}
+    @Lob
+    @Column(name = "softskill_analysis", columnDefinition = "TEXT")
+    private String softskillAnalysis;
+
+    // GENERATING | READY
+    @Column(name = "status", length = 20)
+    private String status;
 
     @Lob
-    @Column(name = "voice_analysis")
+    @Column(name = "voice_analysis", columnDefinition = "TEXT")
     private String voiceAnalysis;
 
     @Lob
-    @Column(name = "nonverbal_analysis")
+    @Column(name = "nonverbal_analysis", columnDefinition = "TEXT")
     private String nonverbalAnalysis;
 }

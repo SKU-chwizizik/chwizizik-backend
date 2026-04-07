@@ -31,6 +31,10 @@ public class Question {
     private String answerText;
 
     @Lob
+    @Column(name = "question_intent", columnDefinition = "TEXT")
+    private String questionIntent;
+
+    @Lob
     @Column(name = "feedback_text", columnDefinition = "TEXT")
     private String feedbackText;
 

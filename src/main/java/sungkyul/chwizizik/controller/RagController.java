@@ -1,6 +1,8 @@
 package sungkyul.chwizizik.controller;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import sungkyul.chwizizik.config.JwtUtil;
 import sungkyul.chwizizik.service.RagService;
@@ -56,13 +58,21 @@ public class RagController {
 
     /** 장치 테스트 완료 후: 신규 질문 5개 생성 → 풀 누적 → Interview 생성 */
     @PostMapping("/generate-pool")
-    public Map<String, Object> generatePool(
+    public ResponseEntity<?> generatePool(
             @CookieValue(name = "accessToken") String token,
             @RequestBody Map<String, Object> payload) {
         String userId = jwtUtil.getUserIdFromToken(token);
         String type   = toBackendType((String) payload.get("type"));
         String lang   = payload.getOrDefault("lang", "ko").toString();
-        return questionPoolService.generateAndAddToPool(userId, type, lang);
+        try {
+            return ResponseEntity.ok(questionPoolService.generateAndAddToPool(userId, type, lang));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "질문 생성에 실패했습니다. 잠시 후 다시 시도해주세요."));
+        }
     }
 
     /** Loading 페이지: 인사말 생성 + 면접 시작 */
@@ -72,6 +82,14 @@ public class RagController {
             @RequestBody Map<String, Object> payload) {
         Long interviewId = Long.valueOf(payload.get("interviewId").toString());
         return questionPoolService.startInterview(interviewId);
+    }
+
+    /** 면접 결과 조회 — 피드백 페이지용 */
+    @GetMapping("/result/{interviewId}")
+    public Map<String, Object> getResult(
+            @CookieValue(name = "accessToken") String token,
+            @PathVariable Long interviewId) {
+        return questionPoolService.getInterviewResult(interviewId);
     }
 
     /** 면접 시뮬레이션: 다음 질문 요청 (꼬리 질문 판단 포함) */

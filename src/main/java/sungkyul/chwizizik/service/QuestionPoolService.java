@@ -1,5 +1,6 @@
 package sungkyul.chwizizik.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -10,6 +11,7 @@ import sungkyul.chwizizik.repository.*;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,6 +26,7 @@ public class QuestionPoolService {
     private final InterviewRepository interviewRepository;
     private final QuestionRepository questionRepository;
     private final QuestionPoolItemRepository questionPoolItemRepository;
+    private final ResultReportRepository resultReportRepository;
 
     /**
      * 신규 질문 5개 생성 → 풀에 추가 → Interview 생성 (POOL_READY 상태)
@@ -58,9 +61,11 @@ public class QuestionPoolService {
                     }
                 }
             }
+        } catch (org.springframework.web.client.HttpClientErrorException.BadRequest e) {
+            interviewRepository.delete(interview);
+            throw new IllegalStateException("이력서를 먼저 업로드해 주세요.");
         } catch (Exception e) {
-            interview.setStatus("POOL_GENERATING");
-            interviewRepository.save(interview);
+            interviewRepository.delete(interview);
             throw new RuntimeException("질문 풀 생성 실패: " + e.getMessage());
         }
 
@@ -180,6 +185,12 @@ public class QuestionPoolService {
         interview.setStatus("IN_PROGRESS");
         interviewRepository.save(interview);
 
+        // ResultReport 생성 (GENERATING 상태 — 면접 완료 후 AI가 채움)
+        resultReportRepository.save(ResultReport.builder()
+                .interview(interview)
+                .status("GENERATING")
+                .build());
+
         // 선택된 풀 아이템 ID 목록을 반환 (프론트→백 세션 유지용 or 백에서 순서 관리)
         List<Long> selectedPoolItemIds = selected.stream()
                 .map(QuestionPoolItem::getPoolItemId)
@@ -205,7 +216,6 @@ public class QuestionPoolService {
                 .orElseThrow(() -> new IllegalArgumentException("면접을 찾을 수 없습니다: " + interviewId));
 
         String type = interview.getInterviewType();
-        String userId = interview.getUser().getUserId();
 
         // 1. 이전 답변 저장
         Question lastQuestion = null;
@@ -273,8 +283,10 @@ public class QuestionPoolService {
             interview.setStatus("COMPLETED");
             interviewRepository.save(interview);
 
-            // 면접 완료 후 답변 평가 비동기 처리 (별도 메서드로 분리)
-            evaluateAnswersAsync(interview, userId, type);
+            // 답변 평가 + 피드백 생성을 백그라운드에서 실행 (LLM 호출이 길어 HTTP 응답 블로킹 방지)
+            final Long interviewIdForAsync = interview.getInterviewId();
+            final String typeForAsync = type;
+            CompletableFuture.runAsync(() -> evaluateAnswersAsync(interviewIdForAsync, typeForAsync));
 
             return Map.of("question", closing, "isFollowUp", false, "isFinished", true);
         }
@@ -314,28 +326,138 @@ public class QuestionPoolService {
     }
 
     /**
-     * 면접 완료 후 각 본 질문-답변 쌍 평가 → poolItem.lastAnswerQuality 업데이트
+     * 면접 결과 조회 — ResultReport + Question 피드백 반환
      */
-    private void evaluateAnswersAsync(Interview interview, String userId, String type) {
-        // 본 질문(questionOrder != null)만 평가
-        List<Question> mainQuestions = interview.getQuestions().stream()
-                .filter(q -> q.getQuestionOrder() != null && q.getAnswerText() != null)
+    public Map<String, Object> getInterviewResult(Long interviewId) {
+        Interview interview = interviewRepository.findById(interviewId)
+                .orElseThrow(() -> new IllegalArgumentException("면접을 찾을 수 없습니다: " + interviewId));
+
+        ResultReport report = resultReportRepository.findByInterview(interview).orElse(null);
+        String status = (report != null && report.getStatus() != null) ? report.getStatus() : "GENERATING";
+
+        List<Map<String, Object>> questionResults = new ArrayList<>();
+        List<Question> mainQuestions = questionRepository.findByInterviewOrderByQuestionOrderAsc(interview)
+                .stream()
+                .filter(q -> q.getQuestionOrder() != null)
                 .collect(Collectors.toList());
 
         for (Question q : mainQuestions) {
-            if (q.getPoolItem() == null) continue;
-            try {
-                Map<String, Object> evalBody = Map.of(
-                    "interview_type", type,
-                    "question_text", q.getQuestionText(),
-                    "user_answer", q.getAnswerText()
-                );
-                Map<?, ?> resp = restTemplate.postForObject(aiServiceUrl + "/evaluate-answer", evalBody, Map.class);
-                if (resp != null && resp.get("quality") instanceof String quality) {
-                    q.getPoolItem().setLastAnswerQuality(quality);
-                    questionPoolItemRepository.save(q.getPoolItem());
-                }
-            } catch (Exception ignored) {}
+            Map<String, Object> qMap = new LinkedHashMap<>();
+            qMap.put("order", q.getQuestionOrder());
+            qMap.put("questionId", q.getQuestionId());
+            qMap.put("questionText", q.getQuestionText());
+            qMap.put("answerText", q.getAnswerText());
+            qMap.put("intent", q.getQuestionIntent());
+            qMap.put("feedback", q.getFeedbackText());
+            qMap.put("improvedAnswer", q.getImprovedAnswer());
+            questionResults.add(qMap);
         }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", status);
+        result.put("summary", report != null ? report.getSummary() : null);
+        result.put("softskillAnalysis", report != null ? report.getSoftskillAnalysis() : null);
+        result.put("questions", questionResults);
+        return result;
+    }
+
+    /**
+     * 면접 완료 후 백그라운드에서 실행: 종합 피드백 생성 → READY → GOOD/POOR 평가
+     * generate-feedback이 완료되어야 결과 페이지에 표시되므로 먼저 실행.
+     * evaluate-answer(풀 품질 관리용)는 READY 처리 후 추가 백그라운드로 처리.
+     * ※ CompletableFuture.runAsync()로 호출되므로 Interview 엔티티를 DB에서 직접 재조회
+     */
+    private void evaluateAnswersAsync(Long interviewId, String type) {
+        Interview interview = interviewRepository.findById(interviewId).orElse(null);
+        if (interview == null) return;
+
+        // 본 질문(questionOrder != null)만 평가
+        List<Question> mainQuestions = questionRepository.findByInterviewOrderByQuestionOrderAsc(interview)
+                .stream()
+                .filter(q -> q.getQuestionOrder() != null && q.getAnswerText() != null)
+                .collect(Collectors.toList());
+
+        // Step 1: 종합 피드백 생성 (/generate-feedback) — 결과 페이지 READY에 필요하므로 먼저 실행
+        ResultReport report = resultReportRepository.findByInterview(interview).orElse(null);
+        if (report == null || mainQuestions.isEmpty()) return;
+
+        try {
+            List<Map<String, Object>> questionPayload = mainQuestions.stream()
+                .map(q -> {
+                    Map<String, Object> m = new HashMap<>();
+                    m.put("question_id", q.getQuestionId());
+                    m.put("question_text", q.getQuestionText());
+                    m.put("answer_text", q.getAnswerText() != null ? q.getAnswerText() : "");
+                    return m;
+                })
+                .collect(Collectors.toList());
+
+            Map<String, Object> feedbackBody = new HashMap<>();
+            feedbackBody.put("interview_type", type);
+            feedbackBody.put("language", interview.getLanguage() != null ? interview.getLanguage() : "ko");
+            feedbackBody.put("questions", questionPayload);
+
+            Map<?, ?> feedbackResp = restTemplate.postForObject(aiServiceUrl + "/generate-feedback", feedbackBody, Map.class);
+            if (feedbackResp == null) {
+                report.setStatus("READY");
+                resultReportRepository.save(report);
+            } else {
+                // ResultReport 업데이트
+                if (feedbackResp.get("summary") instanceof String summary) {
+                    report.setSummary(summary);
+                }
+                if (feedbackResp.get("softskill_analysis") instanceof Map<?, ?> skills) {
+                    try {
+                        report.setSoftskillAnalysis(new ObjectMapper().writeValueAsString(skills));
+                    } catch (Exception ignored) {
+                        report.setSoftskillAnalysis(skills.toString());
+                    }
+                }
+                report.setStatus("READY");
+                resultReportRepository.save(report);
+
+                // 각 질문 피드백 저장
+                if (feedbackResp.get("questions") instanceof List<?> feedbackList) {
+                    for (Object item : feedbackList) {
+                        if (!(item instanceof Map<?, ?> fq)) continue;
+                        Long qId = fq.get("question_id") instanceof Number n ? n.longValue() : null;
+                        if (qId == null) continue;
+                        mainQuestions.stream()
+                            .filter(q -> q.getQuestionId().equals(qId))
+                            .findFirst()
+                            .ifPresent(q -> {
+                                if (fq.get("intent") instanceof String intent) q.setQuestionIntent(intent);
+                                if (fq.get("feedback") instanceof String fb) q.setFeedbackText(fb);
+                                if (fq.get("improved_answer") instanceof String improved) q.setImprovedAnswer(improved);
+                                questionRepository.save(q);
+                            });
+                    }
+                }
+            }
+        } catch (Exception e) {
+            report.setStatus("READY");
+            resultReportRepository.save(report);
+        }
+
+        // Step 2: GOOD/POOR 평가 — 다음 면접 풀 관리용, 결과 표시에 불필요하므로 별도 백그라운드 실행
+        final List<Question> questionsForEval = mainQuestions;
+        final String typeForEval = type;
+        CompletableFuture.runAsync(() -> {
+            for (Question q : questionsForEval) {
+                if (q.getPoolItem() == null) continue;
+                try {
+                    Map<String, Object> evalBody = Map.of(
+                        "interview_type", typeForEval,
+                        "question_text", q.getQuestionText(),
+                        "user_answer", q.getAnswerText()
+                    );
+                    Map<?, ?> resp = restTemplate.postForObject(aiServiceUrl + "/evaluate-answer", evalBody, Map.class);
+                    if (resp != null && resp.get("quality") instanceof String quality) {
+                        q.getPoolItem().setLastAnswerQuality(quality);
+                        questionPoolItemRepository.save(q.getPoolItem());
+                    }
+                } catch (Exception ignored) {}
+            }
+        });
     }
 }
